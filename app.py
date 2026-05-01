@@ -41,6 +41,13 @@ with st.sidebar:
     st.divider()
     run = st.button('🔄 Přepočítat', use_container_width=True, type='primary')
 
+    st.divider()
+    st.caption(
+        '⚠️ **Upozornění:** Tato aplikace byla vytvořena metodou vibecoding '
+        '(AI-assisted development). Uživatel je odpovědný za kontrolu a ověření '
+        'všech výstupů před jejich dalším použitím.'
+    )
+
 
 # ─── data loading ─────────────────────────────────────────────────────────────
 
