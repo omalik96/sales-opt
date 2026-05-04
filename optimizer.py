@@ -1,7 +1,7 @@
 import math
 import pandas as pd
 
-ALL_COMBOS = ['JH', 'JH+PV', 'Gyal', 'Gyal+PV', 'Senec', 'Senec+PV', 'Senec+PV+Prešov', 'Senec+Prešov']
+ALL_COMBOS = ['JH', 'JH+PV', 'Gyal', 'Gyal+PV', 'Senec', 'Senec+PV', 'Senec+PV+Prešov', 'Senec+Prešov', 'Senec+Gyal', 'Senec+JH']
 
 DEFAULT_COMBOS = set(ALL_COMBOS)
 
@@ -93,7 +93,6 @@ def optimise(df: pd.DataFrame, allowed_combos: set = DEFAULT_COMBOS, capacity: i
         # PV assignment
         pv_target = _assign_pv(jh, gyal, senec_base, pv, pv_targets, capacity) if pv > 0 else None
         if pv > 0 and pv_target is None and pv_targets:
-            # pv_targets exist but no main depot has pallets on this day
             warnings.append(
                 f'{date.date()}: {pv} palet PV nelze přiřadit '
                 f'(partnerské depo má 0 palet, nebo žádná PV kombinace není aktivní)'
@@ -102,6 +101,46 @@ def optimise(df: pd.DataFrame, allowed_combos: set = DEFAULT_COMBOS, capacity: i
             warnings.append(
                 f'{date.date()}: {pv} palet PV nelze přepravit (žádná PV kombinace není aktivní)'
             )
+
+        # Pre-compute effective loads after PV assignment
+        pv_jh = pv_target == 'JH'
+        pv_gyal = pv_target == 'Gyal'
+        pv_senec = pv_target == 'Senec'
+        has_presov = presov > 0 and presov_ok
+
+        jh_eff = jh + (pv if pv_jh else 0)
+        jh_bd: dict[str, int] = {k: v for k, v in {'JH': jh, 'PV': pv if pv_jh else 0}.items() if v > 0}
+        jh_z = zj + (zp if pv_jh else 0)
+
+        gyal_eff = gyal + (pv if pv_gyal else 0)
+        gyal_bd: dict[str, int] = {k: v for k, v in {'Gyal': gyal, 'PV': pv if pv_gyal else 0}.items() if v > 0}
+        gyal_z = zg + (zp if pv_gyal else 0)
+
+        senec_parts: dict[str, int] = {}
+        if senec > 0:
+            senec_parts['Senec'] = senec
+        if has_presov:
+            senec_parts['Prešov'] = presov
+        if pv_senec and pv > 0:
+            senec_parts['PV'] = pv
+        senec_eff = sum(senec_parts.values())
+        senec_z = zs + (zpr if has_presov else 0) + (zp if pv_senec else 0)
+
+        # Cross-depot merge decision: Senec+Gyal or Senec+JH saves vehicles?
+        senec_merge: str | None = None
+        if senec_eff > 0:
+            standalone_v = _nveh(senec_eff, capacity) + _nveh(gyal_eff, capacity) + _nveh(jh_eff, capacity)
+            best_v = standalone_v
+
+            if 'Senec+Gyal' in allowed_combos and gyal_eff > 0:
+                v = _nveh(senec_eff + gyal_eff, capacity) + _nveh(jh_eff, capacity)
+                if v < best_v:
+                    best_v, senec_merge = v, 'Gyal'
+
+            if 'Senec+JH' in allowed_combos and jh_eff > 0:
+                v = _nveh(senec_eff + jh_eff, capacity) + _nveh(gyal_eff, capacity)
+                if v < best_v:
+                    best_v, senec_merge = v, 'JH'
 
         # ── Build groups ──────────────────────────────────────────────────────
 
@@ -127,45 +166,40 @@ def optimise(df: pd.DataFrame, allowed_combos: set = DEFAULT_COMBOS, capacity: i
                     'Pozn.': '',
                 })
 
-        # JH group
-        pv_jh = pv_target == 'JH'
-        if jh > 0 or pv_jh:
-            if pv_jh and jh > 0:
-                add_trips('JH+PV', jh + pv, {'JH': jh, 'PV': pv}, zj + zp)
-            elif pv_jh:
-                pass  # PV can't go to JH alone (no JH pallets) – already warned
-            elif jh > 0:
-                if 'JH' in allowed_combos:
-                    add_trips('JH', jh, {'JH': jh}, zj)
-                else:
-                    warnings.append(f'{date.date()}: {jh} palet JH nelze přepravit (kombinace JH není aktivní)')
+        # JH group (skipped when merged with Senec)
+        if senec_merge != 'JH':
+            if jh_eff > 0:
+                if pv_jh and jh > 0:
+                    add_trips('JH+PV', jh_eff, jh_bd, jh_z)
+                elif pv_jh:
+                    pass  # PV can't go to JH alone (no JH pallets) – already warned
+                elif jh > 0:
+                    if 'JH' in allowed_combos:
+                        add_trips('JH', jh, {'JH': jh}, zj)
+                    else:
+                        warnings.append(f'{date.date()}: {jh} palet JH nelze přepravit (kombinace JH není aktivní)')
 
-        # Gyal group
-        pv_gyal = pv_target == 'Gyal'
-        if gyal > 0 or pv_gyal:
-            if pv_gyal and gyal > 0:
-                add_trips('Gyal+PV', gyal + pv, {'Gyal': gyal, 'PV': pv}, zg + zp)
-            elif pv_gyal:
-                pass
-            elif gyal > 0:
-                if 'Gyal' in allowed_combos:
-                    add_trips('Gyal', gyal, {'Gyal': gyal}, zg)
-                else:
-                    warnings.append(f'{date.date()}: {gyal} palet Gyal nelze přepravit (kombinace Gyal není aktivní)')
+        # Gyal group (skipped when merged with Senec)
+        if senec_merge != 'Gyal':
+            if gyal_eff > 0:
+                if pv_gyal and gyal > 0:
+                    add_trips('Gyal+PV', gyal_eff, gyal_bd, gyal_z)
+                elif pv_gyal:
+                    pass
+                elif gyal > 0:
+                    if 'Gyal' in allowed_combos:
+                        add_trips('Gyal', gyal, {'Gyal': gyal}, zg)
+                    else:
+                        warnings.append(f'{date.date()}: {gyal} palet Gyal nelze přepravit (kombinace Gyal není aktivní)')
 
-        # Senec group
-        pv_senec = pv_target == 'Senec'
-        has_presov = presov > 0 and presov_ok
-
-        senec_parts: dict[str, int] = {}
-        if senec > 0:
-            senec_parts['Senec'] = senec
-        if has_presov:
-            senec_parts['Prešov'] = presov
-        if pv_senec:
-            senec_parts['PV'] = pv
-
-        if senec_parts:
+        # Senec group (or cross-depot)
+        if senec_merge == 'Gyal':
+            combined_bd = {**senec_parts, **gyal_bd}
+            add_trips('Senec+Gyal', senec_eff + gyal_eff, combined_bd, senec_z + gyal_z)
+        elif senec_merge == 'JH':
+            combined_bd = {**senec_parts, **jh_bd}
+            add_trips('Senec+JH', senec_eff + jh_eff, combined_bd, senec_z + jh_z)
+        elif senec_parts:
             keys = frozenset(senec_parts)
             if keys == frozenset({'Senec', 'PV', 'Prešov'}):
                 combo = 'Senec+PV+Prešov'
@@ -181,10 +215,7 @@ def optimise(df: pd.DataFrame, allowed_combos: set = DEFAULT_COMBOS, capacity: i
                 combo = 'Senec+Prešov'  # only Prešov, no Senec pallets
             else:
                 combo = None
-
-            z_senec = zs + (zpr if has_presov else 0) + (zp if pv_senec else 0)
-            total_senec = sum(senec_parts.values())
-            add_trips(combo, total_senec, senec_parts, z_senec)
+            add_trips(combo, senec_eff, senec_parts, senec_z)
 
     trips = pd.DataFrame(rows) if rows else pd.DataFrame(
         columns=['Datum', 'Měsíc', 'Kombinace dep', 'Počet dep',
