@@ -213,6 +213,27 @@ def _fmt_matrix(ws, mdf: pd.DataFrame):
     ws.freeze_panes = 'B3'
 
 
+def build_raw_excel(df_ntw, df_115, trips_ntw, trips_115, matrix_ntw, matrix_115) -> bytes:
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine='openpyxl', datetime_format='DD.MM.YYYY') as writer:
+        df_ntw.to_excel(writer, sheet_name='NTW – vstupní data', index=False)
+        df_115.to_excel(writer, sheet_name='1až15 – vstupní data', index=False)
+        if not trips_ntw.empty:
+            trips_ntw.to_excel(writer, sheet_name='NTW – jízdy', index=False)
+        if not trips_115.empty:
+            trips_115.to_excel(writer, sheet_name='1až15 – jízdy', index=False)
+        if not matrix_ntw.empty:
+            matrix_ntw.to_excel(writer, sheet_name='NTW – matice', index=False)
+        if not matrix_115.empty:
+            matrix_115.to_excel(writer, sheet_name='1až15 – matice', index=False)
+        for ws in writer.sheets.values():
+            ws.freeze_panes = 'A2'
+            for col in ws.columns:
+                width = max((len(str(c.value or '')) for c in col), default=8)
+                ws.column_dimensions[col[0].column_letter].width = min(width + 2, 50)
+    return buf.getvalue()
+
+
 def build_excel(trips_ntw, trips_115, matrix_ntw, matrix_115) -> bytes:
     try:
         wb = load_workbook('Data claude.xlsx')
@@ -312,11 +333,22 @@ with tab_sum:
 
     st.divider()
     st.subheader('Export výsledků')
-    excel_bytes = build_excel(trips_ntw, trips_115, matrix_ntw, matrix_115)
-    st.download_button(
-        label='⬇️ Stáhnout výsledky jako Excel',
-        data=excel_bytes,
-        file_name='optimalizace_výsledky.xlsx',
-        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        use_container_width=True,
-    )
+    col_exp1, col_exp2 = st.columns(2)
+    with col_exp1:
+        excel_bytes = build_excel(trips_ntw, trips_115, matrix_ntw, matrix_115)
+        st.download_button(
+            label='⬇️ Stáhnout výsledky (formátovaný)',
+            data=excel_bytes,
+            file_name='optimalizace_výsledky.xlsx',
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            use_container_width=True,
+        )
+    with col_exp2:
+        raw_bytes = build_raw_excel(df_ntw, df_115, trips_ntw, trips_115, matrix_ntw, matrix_115)
+        st.download_button(
+            label='⬇️ Stáhnout raw data (Excel)',
+            data=raw_bytes,
+            file_name='optimalizace_raw.xlsx',
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            use_container_width=True,
+        )
