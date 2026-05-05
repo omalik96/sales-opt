@@ -126,21 +126,25 @@ def optimise(df: pd.DataFrame, allowed_combos: set = DEFAULT_COMBOS, capacity: i
         senec_eff = sum(senec_parts.values())
         senec_z = zs + (zpr if has_presov else 0) + (zp if pv_senec else 0)
 
-        # Cross-depot merge decision: Senec+Gyal or Senec+JH saves vehicles?
+        # Cross-depot merge decision: always merge when combo is enabled and both depots have pallets.
+        # If both Senec+Gyal and Senec+JH are enabled, pick the one with fewer total vehicles (then less waste).
         senec_merge: str | None = None
         if senec_eff > 0:
-            standalone_v = _nveh(senec_eff, capacity) + _nveh(gyal_eff, capacity) + _nveh(jh_eff, capacity)
-            best_v = standalone_v
+            candidates: list[tuple] = []
 
             if 'Senec+Gyal' in allowed_combos and gyal_eff > 0:
                 v = _nveh(senec_eff + gyal_eff, capacity) + _nveh(jh_eff, capacity)
-                if v < best_v:
-                    best_v, senec_merge = v, 'Gyal'
+                waste = v * capacity - (senec_eff + gyal_eff + jh_eff)
+                candidates.append((v, waste, 'Gyal'))
 
             if 'Senec+JH' in allowed_combos and jh_eff > 0:
                 v = _nveh(senec_eff + jh_eff, capacity) + _nveh(gyal_eff, capacity)
-                if v < best_v:
-                    best_v, senec_merge = v, 'JH'
+                waste = v * capacity - (senec_eff + jh_eff + gyal_eff)
+                candidates.append((v, waste, 'JH'))
+
+            if candidates:
+                candidates.sort(key=lambda x: (x[0], x[1]))
+                senec_merge = candidates[0][2]
 
         # ── Build groups ──────────────────────────────────────────────────────
 
