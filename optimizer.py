@@ -126,20 +126,22 @@ def optimise(df: pd.DataFrame, allowed_combos: set = DEFAULT_COMBOS, capacity: i
         senec_eff = sum(senec_parts.values())
         senec_z = zs + (zpr if has_presov else 0) + (zp if pv_senec else 0)
 
-        # Cross-depot merge decision: always merge when combo is enabled and both depots have pallets.
+        # Cross-depot merge: only merge pure-depot groups (no PV on either side).
+        # Mixing a PV assignment with a cross-depot merge would create implicit routes
+        # (e.g. Senec+PV+Gyal) that the user never enabled as a combination.
         # If both Senec+Gyal and Senec+JH are enabled, pick the one with fewer total vehicles (then less waste).
         senec_merge: str | None = None
-        if senec_eff > 0:
+        if senec_eff > 0 and not pv_senec:
             candidates: list[tuple] = []
 
-            if 'Senec+Gyal' in allowed_combos and gyal_eff > 0:
-                v = _nveh(senec_eff + gyal_eff, capacity) + _nveh(jh_eff, capacity)
-                waste = v * capacity - (senec_eff + gyal_eff + jh_eff)
+            if 'Senec+Gyal' in allowed_combos and gyal > 0 and not pv_gyal:
+                v = _nveh(senec_eff + gyal, capacity) + _nveh(jh_eff, capacity)
+                waste = v * capacity - (senec_eff + gyal + jh_eff)
                 candidates.append((v, waste, 'Gyal'))
 
-            if 'Senec+JH' in allowed_combos and jh_eff > 0:
-                v = _nveh(senec_eff + jh_eff, capacity) + _nveh(gyal_eff, capacity)
-                waste = v * capacity - (senec_eff + jh_eff + gyal_eff)
+            if 'Senec+JH' in allowed_combos and jh > 0 and not pv_jh:
+                v = _nveh(senec_eff + jh, capacity) + _nveh(gyal_eff, capacity)
+                waste = v * capacity - (senec_eff + jh + gyal_eff)
                 candidates.append((v, waste, 'JH'))
 
             if candidates:
