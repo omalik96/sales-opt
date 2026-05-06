@@ -163,6 +163,8 @@ BODY_FONT = Font(name='Arial', size=10)
 ALT_FILL = PatternFill('solid', start_color='D6E4F0')
 _THIN = Side(style='thin', color='AAAAAA')
 _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
+DEPOT_COLS = {'JH', 'PV', 'Senec', 'Prešov', 'Gyal'}
+SUM_COLS = {'Palety', 'JH', 'PV', 'Senec', 'Prešov', 'Gyal'}
 
 
 def _fmt_sheet(ws, df: pd.DataFrame):
@@ -186,9 +188,27 @@ def _fmt_sheet(ws, df: pd.DataFrame):
                 cell.number_format = '0.0%'
             elif col_name == 'Datum':
                 cell.number_format = 'DD.MM.YYYY'
+            elif col_name in DEPOT_COLS:
+                cell.alignment = Alignment(horizontal='center')
+                cell.number_format = '0'
+    # totals row
+    tot_ri = ws.max_row + 1
     for ci, col in enumerate(df.columns, 1):
-        max_w = max(len(str(col)), *[len(str(ws.cell(r, ci).value or '')) for r in range(2, ws.max_row + 1)])
-        ws.column_dimensions[get_column_letter(ci)].width = min(max_w + 2, 45)
+        cell = ws.cell(tot_ri, ci)
+        cell.font = Font(name='Arial', bold=True, size=10, color='FFFFFF')
+        cell.fill = HDR_FILL
+        cell.border = _BORDER
+        if ci == 1:
+            cell.value = 'Celkem'
+        elif col in SUM_COLS:
+            cell.value = int(df[col].sum())
+            cell.alignment = Alignment(horizontal='center')
+    for ci, col in enumerate(df.columns, 1):
+        if col in DEPOT_COLS:
+            ws.column_dimensions[get_column_letter(ci)].width = 8
+        else:
+            max_w = max(len(str(col)), *[len(str(ws.cell(r, ci).value or '')) for r in range(2, ws.max_row + 1)])
+            ws.column_dimensions[get_column_letter(ci)].width = min(max_w + 2, 45)
     ws.row_dimensions[1].height = 30
 
 
