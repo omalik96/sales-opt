@@ -213,17 +213,25 @@ def optimise(df: pd.DataFrame, allowed_combos: set = DEFAULT_COMBOS, capacity: i
         elif senec_parts:
             keys = frozenset(senec_parts)
             if keys == frozenset({'Senec', 'PV', 'Prešov'}):
-                combo = 'Senec+PV+Prešov'
+                combo = 'Senec+PV+Prešov' if 'Senec+PV+Prešov' in allowed_combos else None
+                if combo is None:
+                    warnings.append(f'{date.date()}: {senec_eff} palet Senec+PV+Prešov nelze přepravit (kombinace není aktivní)')
             elif keys == frozenset({'Senec', 'PV'}):
-                combo = 'Senec+PV'
+                combo = 'Senec+PV' if 'Senec+PV' in allowed_combos else None
+                if combo is None:
+                    warnings.append(f'{date.date()}: {senec_eff} palet Senec+PV nelze přepravit (kombinace není aktivní)')
             elif keys == frozenset({'Senec', 'Prešov'}):
-                combo = 'Senec+Prešov'
+                combo = 'Senec+Prešov' if 'Senec+Prešov' in allowed_combos else None
+                if combo is None:
+                    warnings.append(f'{date.date()}: {senec_eff} palet Senec+Prešov nelze přepravit (kombinace není aktivní)')
             elif keys == frozenset({'Senec'}):
                 combo = 'Senec' if 'Senec' in allowed_combos else None
                 if combo is None:
                     warnings.append(f'{date.date()}: {senec} palet Senec nelze přepravit (kombinace Senec není aktivní)')
             elif keys == frozenset({'Prešov'}):
-                combo = 'Senec+Prešov'  # only Prešov, no Senec pallets
+                combo = 'Senec+Prešov' if 'Senec+Prešov' in allowed_combos else None
+                if combo is None:
+                    warnings.append(f'{date.date()}: {presov} palet Prešov nelze přepravit (kombinace Senec+Prešov není aktivní)')
             else:
                 combo = None
             add_trips(combo, senec_eff, senec_parts, senec_z)
