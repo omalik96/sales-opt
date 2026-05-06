@@ -170,6 +170,11 @@ def optimise(df: pd.DataFrame, allowed_combos: set = DEFAULT_COMBOS, capacity: i
                     'Počet zásilek': max(1, v_z),
                     'Rozpis palet po depech': _bd_str(vbd),
                     'Pozn.': '',
+                    'JH':     vbd.get('JH', 0),
+                    'PV':     vbd.get('PV', 0),
+                    'Senec':  vbd.get('Senec', 0),
+                    'Prešov': vbd.get('Prešov', 0),
+                    'Gyal':   vbd.get('Gyal', 0),
                 })
 
         # JH group (skipped when merged with Senec)
@@ -225,7 +230,8 @@ def optimise(df: pd.DataFrame, allowed_combos: set = DEFAULT_COMBOS, capacity: i
 
     trips = pd.DataFrame(rows) if rows else pd.DataFrame(
         columns=['Datum', 'Měsíc', 'Kombinace dep', 'Počet dep',
-                 'Palety', 'Vytížení', 'Počet zásilek', 'Rozpis palet po depech', 'Pozn.']
+                 'Palety', 'Vytížení', 'Počet zásilek', 'Rozpis palet po depech', 'Pozn.',
+                 'JH', 'PV', 'Senec', 'Prešov', 'Gyal']
     )
     if not trips.empty:
         trips.insert(0, 'Č. jízdy', range(1, len(trips) + 1))
