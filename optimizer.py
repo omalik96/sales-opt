@@ -126,12 +126,12 @@ def optimise(df: pd.DataFrame, allowed_combos: set = DEFAULT_COMBOS, capacity: i
         senec_eff = sum(senec_parts.values())
         senec_z = zs + (zpr if has_presov else 0) + (zp if pv_senec else 0)
 
-        # Cross-depot merge: only merge pure-depot groups (no PV on either side).
-        # Mixing a PV assignment with a cross-depot merge would create implicit routes
-        # (e.g. Senec+PV+Gyal) that the user never enabled as a combination.
+        # Cross-depot merge: only merge pure-depot groups (no PV, no Prešov on either side).
+        # Mixing a PV or Prešov assignment with a cross-depot merge would create implicit routes
+        # (e.g. Senec+PV+Gyal, Senec+Prešov+Gyal) that the user never enabled as a combination.
         # If both Senec+Gyal and Senec+JH are enabled, pick the one with fewer total vehicles (then less waste).
         senec_merge: str | None = None
-        if senec_eff > 0 and not pv_senec:
+        if senec_eff > 0 and not pv_senec and not has_presov:
             candidates: list[tuple] = []
 
             if 'Senec+Gyal' in allowed_combos and gyal > 0 and not pv_gyal:

@@ -22,6 +22,7 @@ st.set_page_config(
 
 with st.sidebar:
     st.title('🚛 Transport Optimalizace')
+    st.caption('v0.2')
     st.divider()
 
     uploaded = st.file_uploader('Nahrát Excel soubor', type=['xlsx'])
